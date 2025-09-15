@@ -1,8 +1,10 @@
 import React, { useState } from 'react'
-import { generateTests } from './api'
+import GenerateTestdata from './GenerateTestdata';
+import { generateTests, fetchJiraStory } from './api'
 import { GenerateRequest, GenerateResponse, TestCase } from './types'
 
 function App() {
+  const [activeTab, setActiveTab] = useState<'tests' | 'testdata'>('tests');
   const [formData, setFormData] = useState<GenerateRequest>({
     storyTitle: '',
     acceptanceCriteria: '',
@@ -10,6 +12,27 @@ function App() {
     additionalInfo: '',
     categories: ['Positive', 'Negative', 'Edge Case', 'Non Functional']
   })
+  const [jiraId, setJiraId] = useState("");
+
+  const handleFetch = async () => {
+    if (!jiraId.trim()) {
+      setError('Please enter a JIRA ID.');
+      return;
+    }
+    setError(null);
+    try {
+      const data = await fetchJiraStory(jiraId);
+      setFormData(prev => ({
+        ...prev,
+        storyTitle: data.title || '',
+        description: data.description || '',
+        acceptanceCriteria: data.acceptanceCriteria || '',
+        additionalInfo: data.additionalInfo || ''
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch JIRA story');
+    }
+  };
   const [results, setResults] = useState<GenerateResponse | null>(null)
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
@@ -60,7 +83,54 @@ function App() {
 
   return (
     <div>
-      <style>{`
+      {/* Menu Bar */}
+      <nav style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        background: '#2c3e50',
+        padding: '0.5rem 0',
+        marginBottom: '2rem',
+        boxShadow: '0 2px 8px rgba(44,62,80,0.07)'
+      }}>
+        <button
+          onClick={() => setActiveTab('tests')}
+          style={{
+            background: activeTab === 'tests' ? '#3498db' : 'transparent',
+            color: 'white',
+            border: 'none',
+            padding: '0.75rem 2rem',
+            fontSize: '1.1rem',
+            fontWeight: 600,
+            borderRadius: '6px 0 0 6px',
+            cursor: 'pointer',
+            transition: 'background 0.2s',
+            outline: 'none',
+          }}
+        >
+          User Story to Tests
+        </button>
+        <button
+          onClick={() => setActiveTab('testdata')}
+          style={{
+            background: activeTab === 'testdata' ? '#3498db' : 'transparent',
+            color: 'white',
+            border: 'none',
+            padding: '0.75rem 2rem',
+            fontSize: '1.1rem',
+            fontWeight: 600,
+            borderRadius: '0 6px 6px 0',
+            cursor: 'pointer',
+            transition: 'background 0.2s',
+            outline: 'none',
+          }}
+        >
+          Generate Testdata
+        </button>
+      </nav>
+      {activeTab === 'tests' ? (
+        <>
+          <style>{`
         * {
           box-sizing: border-box;
           margin: 0;
@@ -93,17 +163,17 @@ function App() {
           .container {
             max-width: 85%;
             padding: 40px;
-          }
-        }
-        
-        @media (min-width: 1440px) {
-          .container {
-            max-width: 1800px;
-            padding: 50px;
-          }
-        }
-        
-        .header {
+              <div className="jira-row">
+                <label htmlFor="jira-id" className="jira-label">JIRA ID</label>
+                <input
+                  type="text"
+                  id="jira-id"
+                  className="jira-input"
+                  value={jiraId}
+                  onChange={(e) => setJiraId(e.target.value)}
+                />
+                <button type="button" className="jira-fetch-btn" onClick={handleFetch}>Fetch</button>
+              </div>
           text-align: center;
           margin-bottom: 40px;
         }
@@ -361,6 +431,18 @@ function App() {
           <p className="subtitle">Generate comprehensive test cases from your user stories</p>
         </div>
         <form onSubmit={handleSubmit} className="form-container">
+          {/* JIRA ID input and Fetch button */}
+          <div className="form-group" style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
+            <label htmlFor="jira-id" style={{ marginRight: '0.5rem' }}>JIRA ID</label>
+            <input
+              type="text"
+              id="jira-id"
+              value={jiraId}
+              onChange={(e) => setJiraId(e.target.value)}
+              style={{ marginRight: '0.5rem' }}
+            />
+            <button type="button" onClick={handleFetch}>Fetch</button>
+          </div>
           <div className="form-group">
             <label htmlFor="storyTitle" className="form-label">
               Story Title *
@@ -525,6 +607,10 @@ function App() {
           </div>
         )}
       </div>
+        </>
+      ) : (
+        <GenerateTestdata />
+      )}
     </div>
   )
 }

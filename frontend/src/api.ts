@@ -1,3 +1,12 @@
+// Fetch JIRA story details by ID
+export async function fetchJiraStory(jiraId: string): Promise<{ title: string; description: string; acceptanceCriteria: string; additionalInfo?: string }> {
+  const response = await fetch(`${API_BASE_URL}/jira/${encodeURIComponent(jiraId)}`);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+}
 import { GenerateRequest, GenerateResponse } from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081/api'
