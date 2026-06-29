@@ -1,437 +1,332 @@
-import React, { useState } from 'react'
+import React, { useState } from 'react';
+import { generateTests, fetchJiraStory } from './api';
+import { GenerateRequest, GenerateResponse, TestCase } from './types';
 import GenerateTestdata from './GenerateTestdata';
-import { generateTests, fetchJiraStory } from './api'
-import { GenerateRequest, GenerateResponse, TestCase } from './types'
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'tests' | 'testdata'>('tests');
-  const [formData, setFormData] = useState<GenerateRequest>({
-    storyTitle: '',
-    acceptanceCriteria: '',
-    description: '',
-    additionalInfo: '',
-    categories: ['Positive', 'Negative', 'Edge Case', 'Non Functional']
-  })
-  const [jiraId, setJiraId] = useState("");
-
-  const handleFetch = async () => {
-    if (!jiraId.trim()) {
-      setError('Please enter a JIRA ID.');
-      return;
-    }
-    setError(null);
-    try {
-      const data = await fetchJiraStory(jiraId);
-      setFormData(prev => ({
-        ...prev,
-        storyTitle: data.title || '',
-        description: data.description || '',
-        acceptanceCriteria: data.acceptanceCriteria || '',
-        additionalInfo: data.additionalInfo || ''
-      }));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch JIRA story');
-    }
+  // State and handlers
+  type FormData = {
+    storyTitle: string;
+    description: string;
+    acceptanceCriteria: string;
+    additionalInfo: string;
+    categories: string[];
   };
-  const [results, setResults] = useState<GenerateResponse | null>(null)
-  const [isLoading, setIsLoading] = useState<boolean>(false)
-  const [error, setError] = useState<string | null>(null)
-  const [expandedTestCases, setExpandedTestCases] = useState<Set<string>>(new Set())
+  const [formData, setFormData] = useState<FormData>({
+    storyTitle: '',
+    description: '',
+    acceptanceCriteria: '',
+    additionalInfo: '',
+    categories: [],
+  });
+  const [activeTab, setActiveTab] = useState<'tests' | 'testdata'>('tests');
+  const [jiraId, setJiraId] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
+  const [results, setResults] = useState<GenerateResponse | null>(null);
+  const [expandedTestCases, setExpandedTestCases] = useState<Set<string>>(new Set());
 
-  const toggleTestCaseExpansion = (testCaseId: string) => {
-    const newExpanded = new Set(expandedTestCases)
-    if (newExpanded.has(testCaseId)) {
-      newExpanded.delete(testCaseId)
-    } else {
-      newExpanded.add(testCaseId)
-    }
-    setExpandedTestCases(newExpanded)
-  }
-
+  // Handlers
+  const handleInputChange = (field: keyof FormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
   const handleCategoryChange = (category: string) => {
     setFormData(prev => {
-      const categories = prev.categories || []
-      if (categories.includes(category)) {
-        return { ...prev, categories: categories.filter(c => c !== category) }
-      } else {
-        return { ...prev, categories: [...categories, category] }
-      }
-    })
-  }
-
-  const handleInputChange = (field: keyof GenerateRequest, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!formData.storyTitle.trim() || !formData.acceptanceCriteria.trim()) {
-      setError('Story Title and Acceptance Criteria are required')
-      return
-    }
-    setIsLoading(true)
-    setError(null)
+      const categories = prev.categories.includes(category)
+        ? prev.categories.filter(c => c !== category)
+        : [...prev.categories, category];
+      return { ...prev, categories };
+    });
+  };
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
     try {
-      const response = await generateTests(formData)
-      setResults(response)
+      const req: GenerateRequest = {
+        ...formData,
+        categories: formData.categories,
+      };
+      const res: GenerateResponse = await generateTests(req);
+      setResults(res);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate tests')
+      setError('Failed to generate test cases.');
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
+  const handleFetch = async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const story = await fetchJiraStory(jiraId);
+      setFormData(prev => ({
+        ...prev,
+        storyTitle: story.title || '',
+        description: story.description || '',
+        acceptanceCriteria: story.acceptanceCriteria || '',
+      }));
+    } catch (err) {
+      setError('Failed to fetch JIRA story.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  const toggleTestCaseExpansion = (id: string) => {
+    setExpandedTestCases(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) newSet.delete(id);
+      else newSet.add(id);
+      return newSet;
+    });
+  };
 
+  // UI
   return (
-    <div>
-      {/* Menu Bar */}
-      <nav style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        background: '#2c3e50',
-        padding: '0.5rem 0',
-        marginBottom: '2rem',
-        boxShadow: '0 2px 8px rgba(44,62,80,0.07)'
-      }}>
-        <button
-          onClick={() => setActiveTab('tests')}
-          style={{
-            background: activeTab === 'tests' ? '#3498db' : 'transparent',
-            color: 'white',
-            border: 'none',
-            padding: '0.75rem 2rem',
-            fontSize: '1.1rem',
-            fontWeight: 600,
-            borderRadius: '6px 0 0 6px',
-            cursor: 'pointer',
-            transition: 'background 0.2s',
-            outline: 'none',
-          }}
-        >
-          User Story to Tests
-        </button>
-        <button
-          onClick={() => setActiveTab('testdata')}
-          style={{
-            background: activeTab === 'testdata' ? '#3498db' : 'transparent',
-            color: 'white',
-            border: 'none',
-            padding: '0.75rem 2rem',
-            fontSize: '1.1rem',
-            fontWeight: 600,
-            borderRadius: '0 6px 6px 0',
-            cursor: 'pointer',
-            transition: 'background 0.2s',
-            outline: 'none',
-          }}
-        >
-          Generate Testdata
-        </button>
-      </nav>
-      {activeTab === 'tests' ? (
-        <>
-          <style>{`
-        * {
-          box-sizing: border-box;
-          margin: 0;
-          padding: 0;
-        }
-        
+    <div className="app-wrapper">
+      <style>{`
         body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-          background-color: #f5f5f5;
-          color: #333;
-          line-height: 1.6;
+          background: linear-gradient(135deg, #e3f2fd 0%, #f5f6fa 100%);
         }
-        
-        .container {
-          max-width: 95%;
-          width: 100%;
-          margin: 0 auto;
-          padding: 20px;
-          min-height: 100vh;
+        .main-wrapper {
+          max-width: 900px;
+          margin: 56px auto;
         }
-        
-        @media (min-width: 768px) {
-          .container {
-            max-width: 90%;
-            padding: 30px;
-          }
+        .card {
+          background: #fff;
+          border-radius: 18px;
+          box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+          padding: 48px 48px 48px 48px;
+          margin-bottom: 48px;
         }
-        
-        @media (min-width: 1024px) {
-          .container {
-            max-width: 85%;
-            padding: 40px;
-              <div className="jira-row">
-                <label htmlFor="jira-id" className="jira-label">JIRA ID</label>
-                <input
-                  type="text"
-                  id="jira-id"
-                  className="jira-input"
-                  value={jiraId}
-                  onChange={(e) => setJiraId(e.target.value)}
-                />
-                <button type="button" className="jira-fetch-btn" onClick={handleFetch}>Fetch</button>
-              </div>
-          text-align: center;
-          margin-bottom: 40px;
+        .header {
+          margin-bottom: 24px;
         }
-        
         .title {
-          font-size: 2.5rem;
-          color: #2c3e50;
-          margin-bottom: 10px;
+          font-size: 2.6rem;
+          font-weight: 800;
+          color: #1976d2;
+          margin-bottom: 0.5rem;
+          letter-spacing: 1px;
+          font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
         }
-        
         .subtitle {
-          color: #666;
-          font-size: 1.1rem;
+          color: #1976d2;
+          font-size: 1.18rem;
+          font-weight: 500;
+          font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
         }
-        
-        .form-container {
-          background: white;
-          border-radius: 8px;
-          padding: 30px;
-          box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-          margin-bottom: 30px;
-        }
-        
         .form-group {
-          margin-bottom: 20px;
+          margin-bottom: 1.5rem;
         }
-        
         .form-label {
+          font-weight: 700;
+          color: #1976d2;
+          margin-bottom: 0.4rem;
           display: block;
-          font-weight: 600;
-          margin-bottom: 8px;
-          color: #2c3e50;
+          font-size: 1.13rem;
+          font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
         }
-        
         .form-input, .form-textarea {
           width: 100%;
-          padding: 12px;
-          border: 2px solid #e1e8ed;
-          border-radius: 6px;
-          font-size: 14px;
-          transition: border-color 0.2s;
+          padding: 14px 18px;
+          border-radius: 10px;
+          border: 2.5px solid #87ceeb;
+          font-size: 1.15rem;
+          margin-top: 0.2rem;
+          background: #f8faff;
+          transition: border 0.2s;
+          font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
         }
-        
         .form-input:focus, .form-textarea:focus {
+          border-color: #1976d2;
           outline: none;
-          border-color: #3498db;
         }
-        
+        #storyTitle.form-input {
+          border-color: #87ceeb;
+          height: 40px;
+          min-height: 40px;
+          max-height: 40px;
+        }
         .form-textarea {
+          min-height: 40px;
+          max-height: 100px;
           resize: vertical;
-          min-height: 100px;
+          overflow-y: auto;
+          border-width: 3px;
         }
-        
-        .submit-btn {
-          background: #3498db;
-          color: white;
-          border: none;
-          padding: 12px 24px;
-          border-radius: 6px;
-          font-size: 16px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: background-color 0.2s;
+        #description.form-textarea,
+        #acceptanceCriteria.form-textarea,
+        #additionalInfo.form-textarea {
+          border-color: #87ceeb;
         }
-        
-        .submit-btn:hover:not(:disabled) {
-          background: #2980b9;
-        }
-        
-        .submit-btn:disabled {
-          background: #bdc3c7;
-          cursor: not-allowed;
-        }
-        
-        .error-banner {
-          background: #e74c3c;
-          color: white;
-          padding: 15px;
-          border-radius: 6px;
-          margin-bottom: 20px;
-        }
-        
-        .loading {
-          text-align: center;
-          padding: 40px;
-          color: #666;
-          font-size: 18px;
-        }
-        
-        .results-container {
-          background: white;
-          border-radius: 8px;
-          padding: 30px;
-          box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .results-header {
-          margin-bottom: 20px;
-          padding-bottom: 15px;
-          border-bottom: 2px solid #e1e8ed;
-        }
-        
-        .results-title {
-          font-size: 1.8rem;
-          color: #2c3e50;
-          margin-bottom: 10px;
-        }
-        
-        .results-meta {
-          color: #666;
-          font-size: 14px;
-        }
-        
-        .table-container {
-          overflow-x: auto;
-        }
-        
-        .results-table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-top: 20px;
-        }
-        
-        .results-table th,
-        .results-table td {
-          padding: 12px;
-          text-align: left;
-          border-bottom: 1px solid #e1e8ed;
-        }
-        
-        .results-table th {
-          background: #f8f9fa;
-          font-weight: 600;
-          color: #2c3e50;
-        }
-        
-        .results-table tr:hover {
-          background: #f8f9fa;
-        }
-        
-        .category-positive { color: #27ae60; font-weight: 600; }
-        .category-negative { color: #e74c3c; font-weight: 600; }
-        .category-edge { color: #f39c12; font-weight: 600; }
-        .category-authorization { color: #9b59b6; font-weight: 600; }
-        .category-non-functional { color: #34495e; font-weight: 600; }
-        
-        .test-case-id {
-          cursor: pointer;
-          color: #3498db;
-          font-weight: 600;
-          padding: 8px 12px;
-          border-radius: 4px;
-          transition: background-color 0.2s;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-        }
-        
-        .test-case-id:hover {
-          background: #f8f9fa;
-        }
-        
-        .test-case-id.expanded {
-          background: #e3f2fd;
-          color: #1976d2;
-        }
-        
-        .expand-icon {
-          font-size: 10px;
-          transition: transform 0.2s;
-        }
-        
-        .expand-icon.expanded {
-          transform: rotate(90deg);
-        }
-        
-        .expanded-details {
-          margin-top: 15px;
-          background: #fafbfc;
-          border: 1px solid #e1e8ed;
-          border-radius: 8px;
-          padding: 20px;
-        }
-        
-        .step-item {
-          background: white;
-          border: 1px solid #e1e8ed;
-          border-radius: 6px;
-          padding: 15px;
-          margin-bottom: 12px;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        }
-        
-        .step-header {
-          display: grid;
-          grid-template-columns: 80px 1fr 1fr 1fr;
-          gap: 15px;
-          align-items: start;
-        }
-        
-        .step-id {
-          font-weight: 600;
-          color: #2c3e50;
-          background: #f8f9fa;
-          padding: 4px 8px;
-          border-radius: 4px;
-          text-align: center;
-          font-size: 12px;
-        }
-        
-        .step-description {
-          color: #2c3e50;
-          line-height: 1.5;
-        }
-        
-        .step-test-data {
-          color: #666;
-          font-style: italic;
-          font-size: 14px;
-        }
-        
-        .step-expected {
-          color: #27ae60;
-          font-weight: 500;
-          font-size: 14px;
-        }
-        
-        .step-labels {
-          display: grid;
-          grid-template-columns: 80px 1fr 1fr 1fr;
-          gap: 15px;
-          margin-bottom: 10px;
-          font-weight: 600;
-          color: #666;
-          font-size: 12px;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-        
         .category-checkbox-group {
           display: flex;
           gap: 18px;
-          margin-bottom: 10px;
+          margin-bottom: 20px;
         }
         .category-checkbox-label {
           display: flex;
           align-items: center;
-          gap: 6px;
-          font-weight: 500;
+          gap: 8px;
+          font-weight: 600;
+          background: #e3f2fd;
+          border: 2.5px solid #87ceeb;
+          border-radius: 22px;
+          padding: 10px 30px;
+          cursor: pointer;
+          transition: background 0.2s, border 0.2s, color 0.2s;
+          font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+        }
+        .category-checkbox-label.selected {
+          background: #1976d2;
+          border-color: #1976d2;
+          color: #fff;
+        }
+        .category-checkbox-label input[type="checkbox"] {
+          accent-color: #1976d2;
+        }
+        .submit-btn {
+          padding: 14px 32px;
+          border-radius: 10px;
+          border: none;
+          background: linear-gradient(90deg, #1976d2 60%, #87ceeb 100%);
+          color: #fff;
+          font-size: 1.18rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: background 0.2s;
+          margin-top: 22px;
+          margin-left: 0;
+          display: inline-block;
+          box-shadow: 0 2px 8px rgba(33,150,243,0.08);
+          font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+        }
+        .submit-btn:disabled {
+          background: #b2bec3;
+          cursor: not-allowed;
+        }
+        .submit-btn:not(:disabled):hover {
+          background: #1565c0;
+        }
+        .error-banner {
+          background: #ffeaea;
+          color: #c0392b;
+          padding: 14px;
+          border-radius: 8px;
+          margin-top: 1.2rem;
+          margin-bottom: 1.2rem;
+          font-size: 1.08rem;
+          font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+        }
+        .loading {
+          color: #888;
+          margin-top: 1.2rem;
+        }
+        .results-container {
+          background: #fff;
+          border-radius: 18px;
+          box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+          padding: 40px 40px 40px 40px;
+          margin-bottom: 36px;
+        }
+        .results-header {
+          margin-bottom: 24px;
+          padding-bottom: 18px;
+          border-bottom: 3px solid #87ceeb;
+        }
+        .results-title {
+          font-size: 2.1rem;
+          color: #1976d2;
+          margin-bottom: 12px;
+          font-weight: 800;
+          font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+        }
+        .results-meta {
+          color: #1976d2;
+          font-size: 1.08rem;
+          font-weight: 600;
+          font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+        }
+        .table-container {
+          overflow-x: auto;
+        }
+        .results-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 24px;
+          background: #f8faff;
+          border-radius: 12px;
+          box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+        }
+        .results-table th,
+        .results-table td {
+          padding: 18px 16px;
+          text-align: center;
+          border-bottom: 2.5px solid #87ceeb;
+          font-size: 1.13rem;
+          font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+        }
+        .results-table th {
+          background: #e3f2fd;
+          font-weight: 800;
+          color: #1976d2;
+          font-size: 1.18rem;
+          letter-spacing: 0.5px;
+          font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+        }
+        .results-table tr:nth-child(even) {
+          background: #f8f9fa;
+        }
+        .category-negative { color: #e74c3c; font-weight: 900; }
+        .category-edge { color: #1976d2; font-weight: 900; }
+        .category-positive { color: #27ae60; font-weight: 900; }
+        .category-authorization { color: #9b59b6; font-weight: 900; }
+        .category-non-functional { color: #34495e; font-weight: 900; }
+        .steps-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 18px;
+          background: #f8faff;
+          border-radius: 10px;
+          box-shadow: 0 2px 8px rgba(33,150,243,0.08);
+        }
+        .steps-table th, .steps-table td {
+          border: 2px solid #87ceeb;
+          padding: 12px 14px;
+          text-align: center;
+          font-size: 1.08rem;
+          font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+        }
+        .steps-table th {
+          background: #e3f2fd;
+          color: #1976d2;
+          font-weight: 700;
+          font-size: 1.13rem;
         }
       `}</style>
       <div className="container">
-        <div className="header">
-          <h1 className="title">User Story to Tests</h1>
-          <p className="subtitle">Generate comprehensive test cases from your user stories</p>
+        <div className="menu-bar" style={{ display: 'flex', gap: '2rem', borderBottom: '2px solid #87ceeb', marginBottom: '2rem', paddingBottom: '0.5rem' }}>
+          <div
+            style={{ cursor: 'pointer', fontWeight: activeTab === 'tests' ? 'bold' : 'normal', color: activeTab === 'tests' ? '#1976d2' : '#2c3e50', fontSize: '1.2rem' }}
+            onClick={() => setActiveTab('tests')}
+          >
+            User Story to Tests
+          </div>
+          <div
+            style={{ cursor: 'pointer', fontWeight: activeTab === 'testdata' ? 'bold' : 'normal', color: activeTab === 'testdata' ? '#1976d2' : '#2c3e50', fontSize: '1.2rem' }}
+            onClick={() => setActiveTab('testdata')}
+          >
+            Generate Testdata
+          </div>
         </div>
-        <form onSubmit={handleSubmit} className="form-container">
-          {/* JIRA ID input and Fetch button */}
+        {activeTab === 'tests' && (
+          <>
+            <div className="header">
+              <h1 className="title">User Story to Tests</h1>
+              <p className="subtitle">Generate comprehensive test cases from your user stories</p>
+            </div>
+      <form onSubmit={handleSubmit} className="form-container">
           <div className="form-group" style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
             <label htmlFor="jira-id" style={{ marginRight: '0.5rem' }}>JIRA ID</label>
             <input
@@ -444,9 +339,7 @@ function App() {
             <button type="button" onClick={handleFetch}>Fetch</button>
           </div>
           <div className="form-group">
-            <label htmlFor="storyTitle" className="form-label">
-              Story Title *
-            </label>
+            <label htmlFor="storyTitle" className="form-label">Story Title *</label>
             <input
               type="text"
               id="storyTitle"
@@ -458,9 +351,7 @@ function App() {
             />
           </div>
           <div className="form-group">
-            <label htmlFor="description" className="form-label">
-              Description
-            </label>
+            <label htmlFor="description" className="form-label">Description</label>
             <textarea
               id="description"
               className="form-textarea"
@@ -470,9 +361,7 @@ function App() {
             />
           </div>
           <div className="form-group">
-            <label htmlFor="acceptanceCriteria" className="form-label">
-              Acceptance Criteria *
-            </label>
+            <label htmlFor="acceptanceCriteria" className="form-label">Acceptance Criteria *</label>
             <textarea
               id="acceptanceCriteria"
               className="form-textarea"
@@ -483,9 +372,7 @@ function App() {
             />
           </div>
           <div className="form-group">
-            <label htmlFor="additionalInfo" className="form-label">
-              Additional Info
-            </label>
+            <label htmlFor="additionalInfo" className="form-label">Additional Info</label>
             <textarea
               id="additionalInfo"
               className="form-textarea"
@@ -511,24 +398,14 @@ function App() {
               ))}
             </div>
           </div>
-          <button
-            type="submit"
-            className="submit-btn"
-            disabled={isLoading}
-          >
-            {isLoading ? 'Generating...' : 'Generate'}
-          </button>
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <button type="submit" className="submit-btn" disabled={isLoading}>
+              {isLoading ? 'Generating...' : 'Generate'}
+            </button>
+          </div>
         </form>
-        {error && (
-          <div className="error-banner">
-            {error}
-          </div>
-        )}
-        {isLoading && (
-          <div className="loading">
-            Generating test cases...
-          </div>
-        )}
+        {error && <div className="error-banner">{error}</div>}
+        {isLoading && <div className="loading">Generating test cases...</div>}
         {results && (
           <div className="results-container">
             <div className="results-header">
@@ -576,25 +453,27 @@ function App() {
                         <tr key={`${testCase.id}-details`}>
                           <td colSpan={4}>
                             <div className="expanded-details">
-                              <h4 style={{marginBottom: '15px', color: '#2c3e50'}}>Test Steps for {testCase.id}</h4>
-                              <div className="step-labels">
-                                <div>Step ID</div>
-                                <div>Step Description</div>
-                                <div>Test Data</div>
-                                <div>Expected Result</div>
-                              </div>
-                              {testCase.steps.map((step, index) => (
-                                <div key={index} className="step-item">
-                                  <div className="step-header">
-                                    <div className="step-id">S{String(index + 1).padStart(2, '0')}</div>
-                                    <div className="step-description">{step}</div>
-                                    <div className="step-test-data">{testCase.testData || 'N/A'}</div>
-                                    <div className="step-expected">
-                                      {index === testCase.steps.length - 1 ? testCase.expectedResult : 'Step completed successfully'}
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
+                              <h4 style={{marginBottom: '15px', color: '#1976d2', fontWeight: 700, fontSize: '1.18rem', fontFamily: 'Segoe UI, Roboto, Arial, sans-serif'}}>Test Steps for {testCase.id}</h4>
+                              <table className="steps-table">
+                                <thead>
+                                  <tr>
+                                    <th>Step ID</th>
+                                    <th>Step Description</th>
+                                    <th>Test Data</th>
+                                    <th>Expected Result</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {testCase.steps.map((step, index) => (
+                                    <tr key={index}>
+                                      <td>S{String(index + 1).padStart(2, '0')}</td>
+                                      <td>{step}</td>
+                                      <td>{testCase.testData || 'N/A'}</td>
+                                      <td>{index === testCase.steps.length - 1 ? testCase.expectedResult : 'Step completed successfully'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
                             </div>
                           </td>
                         </tr>
@@ -606,13 +485,22 @@ function App() {
             </div>
           </div>
         )}
+          </>
+        )}
+        {activeTab === 'testdata' && (
+          <GenerateTestdata
+            storyTitle={formData.storyTitle}
+            description={formData.description}
+            acceptanceCriteria={formData.acceptanceCriteria}
+            additionalInfo={formData.additionalInfo}
+            testCases={results?.cases || []}
+            showError={!(formData.storyTitle.trim() && formData.acceptanceCriteria.trim())}
+            errorMessage={!(formData.storyTitle.trim() && formData.acceptanceCriteria.trim()) ? 'Please fill in all mandatory fields (Story Title and Acceptance Criteria).' : ''}
+          />
+        )}
       </div>
-        </>
-      ) : (
-        <GenerateTestdata />
-      )}
     </div>
-  )
+  );
 }
 
 export default App
