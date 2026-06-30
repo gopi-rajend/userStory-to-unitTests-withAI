@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { GenerateRequest } from './types';
 // You may need to create a new API endpoint for test data generation if not present
